@@ -77,24 +77,31 @@ func (s *AuthService) AuthRegister(ctx context.Context, username, password, emai
 		)
 		// 检查邮箱验证码
 		code, err := s.emailRedisDAO.GetVerificationCodeByEmail(ctx, email)
-		if err == nil && len(code) > 0 {
-			if code != verificationCode {
-				logger.Error("用户注册失败：邮箱验证码错误",
-					zap.String("email", email),
-					zap.String("providedCode", verificationCode),
-					zap.String("expectedCode", code),
-					zap.String("operation", "GetVerificationCodeByEmail"),
-					zap.Error(err),
-				)
-				return appErrors.ErrInvalidVerificationCode
-			}
-		} else if err != nil {
+		if err != nil {
 			logger.Error("用户注册失败：获取邮箱验证码错误",
 				zap.String("email", email),
 				zap.String("operation", "GetVerificationCodeByEmail"),
 				zap.Error(err),
 			)
 			return appErrors.ErrDatabaseOperation.WithError(err)
+		}
+
+		if code == "" {
+			logger.Error("用户注册失败：验证码不存在或已过期",
+				zap.String("email", email),
+				zap.String("operation", "GetVerificationCodeByEmail"),
+			)
+			return appErrors.ErrVerificationCodeExpiredOrNotFound
+		}
+
+		if code != verificationCode {
+			logger.Error("用户注册失败：邮箱验证码错误",
+				zap.String("email", email),
+				zap.String("providedCode", verificationCode),
+				zap.String("expectedCode", code),
+				zap.String("operation", "GetVerificationCodeByEmail"),
+			)
+			return appErrors.ErrInvalidVerificationCode
 		}
 
 		logger.Info("开始密码加密",
