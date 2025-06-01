@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"golang.org/x/crypto/bcrypt"
@@ -20,6 +21,39 @@ import (
 // Mock UserDAO
 type mockUserDAO struct {
 	mock.Mock
+}
+
+type mockEmailRedisDAO struct {
+	mock.Mock
+}
+
+type mockEmailService struct {
+	mock.Mock
+}
+
+func (m *mockEmailService) GenerateVerificationCode(length int) (string, error) {
+	args := m.Called(length)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockEmailService) SendVerificationEmail(ctx context.Context, email, code string) error {
+	args := m.Called(ctx, email, code)
+	return args.Error(0)
+}
+
+func (m *mockEmailRedisDAO) GetVerificationCodeByEmail(ctx context.Context, email string, tx ...*redis.Client) (string, error) {
+	args := m.Called(ctx, email, tx)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockEmailRedisDAO) SetVerificationCodeByEmail(ctx context.Context, email string, code string) error {
+	args := m.Called(ctx, email, code)
+	return args.Error(0)
+}
+
+func (m *mockEmailRedisDAO) DeleteCacheByEmail(ctx context.Context, email string) error {
+	args := m.Called(ctx, email)
+	return args.Error(0)
 }
 
 func (m *mockUserDAO) GetByUsername(ctx context.Context, username string, tx ...*gorm.DB) (*models.User, error) {
@@ -53,20 +87,14 @@ func (m *mockUserDAO) GetByID(ctx context.Context, id int, tx ...*gorm.DB) (*mod
 	return userArg.(*models.User), args.Error(1)
 }
 
-// Mock TransactionManager
-type mockTransactionManager struct {
-	mock.Mock
+func (m *mockUserDAO) UpdatePassword(ctx context.Context, userID int, password string, tx ...*gorm.DB) error {
+	args := m.Called(ctx, userID, password, tx)
+	return args.Error(0)
 }
 
-func (m *mockTransactionManager) WithTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
-	args := m.Called(ctx, fn)
-	// 执行回调函数，传入nil作为tx参数
-	err := fn(nil)
-	// 返回回调错误或配置的mock错误
-	if args.Error(0) != nil {
-		return args.Error(0)
-	}
-	return err
+func (m *mockUserDAO) GetByEmail(ctx context.Context, email string, tx ...*gorm.DB) (*models.User, error) {
+	args := m.Called(ctx, email, tx)
+	return args.Get(0).(*models.User), args.Error(1)
 }
 
 // Mock JwtHandler
@@ -91,18 +119,20 @@ func (m *mockJwtHandler) ParseJWTToken(tokenString string) (pkg.JwtPayload, erro
 
 // --- 测试准备 ---
 
-func setupAuthServiceTest() (*AuthService, *mockUserDAO, *mockTransactionManager, *mockJwtHandler) {
+func setupAuthServiceTest() (*AuthService, *mockUserDAO, *mockTransactionManager, *mockJwtHandler, *mockEmailRedisDAO) {
 	mockUserDao := new(mockUserDAO)
 	mockTxManager := new(mockTransactionManager)
 	mockJwt := new(mockJwtHandler)
-	authService := NewAuthService(mockUserDao, mockTxManager, mockJwt)
-	return authService, mockUserDao, mockTxManager, mockJwt
+	mockEmailRedisDAO := new(mockEmailRedisDAO)
+	mockEmailService := new(mockEmailService)
+	authService := NewAuthService(mockUserDao, mockTxManager, mockJwt, mockEmailRedisDAO, mockEmailService)
+	return authService, mockUserDao, mockTxManager, mockJwt, mockEmailRedisDAO
 }
 
 // --- AuthRegister 测试 ---
 
 func TestAuthRegister_Success(t *testing.T) {
-	authService, mockUserDao, mockTxManager, _ := setupAuthServiceTest()
+	authService, mockUserDao, mockTxManager, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 	username := "newuser"
 	password := "password123"
@@ -118,7 +148,7 @@ func TestAuthRegister_Success(t *testing.T) {
 	})
 
 	// 调用函数
-	createdUser, err := authService.AuthRegister(ctx, username, password)
+	createdUser, err := authService.AuthRegister(ctx, username, password, "", "")
 
 	// 断言
 	assert.NoError(t, err)
@@ -133,7 +163,7 @@ func TestAuthRegister_Success(t *testing.T) {
 }
 
 func TestAuthRegister_UserAlreadyExists(t *testing.T) {
-	authService, mockUserDao, mockTxManager, _ := setupAuthServiceTest()
+	authService, mockUserDao, mockTxManager, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 	username := "existinguser"
 	password := "password123"
@@ -144,7 +174,7 @@ func TestAuthRegister_UserAlreadyExists(t *testing.T) {
 	mockUserDao.On("GetByUsername", ctx, username, mock.AnythingOfType("[]*gorm.DB")).Return(existingUser, nil) // 用户已存在
 
 	// 调用函数
-	createdUser, err := authService.AuthRegister(ctx, username, password)
+	createdUser, err := authService.AuthRegister(ctx, username, password, "", "")
 
 	// 断言
 	assert.Error(t, err)
@@ -166,7 +196,7 @@ func getTestPasswordHash(password string) (string, error) {
 }
 
 func TestAuthLogin_Success(t *testing.T) {
-	authService, mockUserDao, mockTxManager, mockJwt := setupAuthServiceTest()
+	authService, mockUserDao, mockTxManager, mockJwt, _ := setupAuthServiceTest()
 	ctx := context.Background()
 	username := "testuser"
 	password := "password123"
@@ -203,7 +233,7 @@ func TestAuthLogin_Success(t *testing.T) {
 }
 
 func TestAuthLogin_UserNotFound(t *testing.T) {
-	authService, mockUserDao, mockTxManager, mockJwt := setupAuthServiceTest()
+	authService, mockUserDao, mockTxManager, mockJwt, _ := setupAuthServiceTest()
 	ctx := context.Background()
 	username := "nonexistentuser"
 	password := "password123"
@@ -228,7 +258,7 @@ func TestAuthLogin_UserNotFound(t *testing.T) {
 }
 
 func TestAuthLogin_InvalidPassword(t *testing.T) {
-	authService, mockUserDao, mockTxManager, mockJwt := setupAuthServiceTest()
+	authService, mockUserDao, mockTxManager, mockJwt, _ := setupAuthServiceTest()
 	ctx := context.Background()
 	username := "testuser"
 	wrongPassword := "wrongpassword"

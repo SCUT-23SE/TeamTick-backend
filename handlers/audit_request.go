@@ -21,12 +21,19 @@ func NewAuditRequestHandler(container *app.AppContainer) gen.AuditRequestsServer
 		container.DaoFactory.TaskRecordDAO,
 		container.DaoFactory.TaskDAO,
 		container.DaoFactory.GroupDAO,
+		container.DaoFactory.CheckApplicationRedisDAO,
+		container.DaoFactory.TaskRedisDAO,
+		container.DaoFactory.TaskRecordRedisDAO,
 	)
 	groupsService := service.NewGroupsService(
 		container.DaoFactory.GroupDAO,
 		container.DaoFactory.GroupMemberDAO,
 		container.DaoFactory.JoinApplicationDAO,
 		container.DaoFactory.TransactionManager,
+		container.DaoFactory.GroupRedisDAO,
+		container.DaoFactory.GroupMemberRedisDAO,
+		container.DaoFactory.JoinApplicationRedisDAO,
+		container.DaoFactory.TaskRedisDAO,
 	)
 	handler := &AuditRequestHandler{
 		auditRequestService: auditRequestService,
@@ -226,13 +233,13 @@ func (h *AuditRequestHandler) PutAuditRequestsAuditRequestId(ctx context.Context
 	if !ok {
 		return nil, appErrors.ErrJwtParseFailed
 	}
-	
+
 	// 获取审核请求对应的组ID
 	groupID, err := h.auditRequestService.GetGroupIDByAuditRequestID(ctx, request.AuditRequestId)
 	if err != nil {
 		if errors.Is(err, appErrors.ErrAuditRequestNotFound) {
 			return &gen.PutAuditRequestsAuditRequestId404JSONResponse{
-				Code:    "1", 
+				Code:    "1",
 				Message: "未找到审核请求",
 			}, nil
 		}
@@ -255,8 +262,7 @@ func (h *AuditRequestHandler) PutAuditRequestsAuditRequestId(ctx context.Context
 		}
 		return nil, err
 	}
-	
-	
+
 	// 调用服务更新审核请求状态
 	err = h.auditRequestService.UpdateAuditRequest(ctx, request.AuditRequestId, string(request.Body.Action))
 	if err != nil {

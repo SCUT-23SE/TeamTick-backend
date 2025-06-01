@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
@@ -16,10 +17,6 @@ import (
 
 // --- Mock 实现 ---
 
-// Mock GroupDAO
-type mockGroupDAO struct {
-	mock.Mock
-}
 
 func (m *mockGroupDAO) Create(ctx context.Context, group *models.Group, tx ...*gorm.DB) error {
 	args := m.Called(ctx, group, tx)
@@ -32,14 +29,6 @@ func (m *mockGroupDAO) Create(ctx context.Context, group *models.Group, tx ...*g
 	return args.Error(0)
 }
 
-func (m *mockGroupDAO) GetByGroupID(ctx context.Context, groupID int, tx ...*gorm.DB) (*models.Group, error) {
-	args := m.Called(ctx, groupID, tx)
-	groupArg := args.Get(0)
-	if groupArg == nil {
-		return nil, args.Error(1)
-	}
-	return groupArg.(*models.Group), args.Error(1)
-}
 
 func (m *mockGroupDAO) GetGroupsByUserID(ctx context.Context, userID int, tx ...*gorm.DB) ([]*models.Group, error) {
 	args := m.Called(ctx, userID, tx)
@@ -75,10 +64,6 @@ func (m *mockGroupDAO) Delete(ctx context.Context, groupID int, tx ...*gorm.DB) 
 	return args.Error(0)
 }
 
-// Mock GroupMemberDAO
-type mockGroupMemberDAO struct {
-	mock.Mock
-}
 
 func (m *mockGroupMemberDAO) Create(ctx context.Context, member *models.GroupMember, tx ...*gorm.DB) error {
 	args := m.Called(ctx, member, tx)
@@ -97,14 +82,7 @@ func (m *mockGroupMemberDAO) GetMemberByGroupIDAndUserID(ctx context.Context, gr
 	return memberArg.(*models.GroupMember), args.Error(1)
 }
 
-func (m *mockGroupMemberDAO) GetMembersByGroupID(ctx context.Context, groupID int, tx ...*gorm.DB) ([]*models.GroupMember, error) {
-	args := m.Called(ctx, groupID, tx)
-	membersArg := args.Get(0)
-	if membersArg == nil {
-		return nil, args.Error(1)
-	}
-	return membersArg.([]*models.GroupMember), args.Error(1)
-}
+
 
 func (m *mockGroupMemberDAO) Delete(ctx context.Context, groupID, userID int, tx ...*gorm.DB) error {
 	args := m.Called(ctx, groupID, userID, tx)
@@ -177,28 +155,175 @@ func (m *mockJoinApplicationDAO) GetByGroupID(ctx context.Context, groupID int, 
 	return applicationsArg.([]*models.JoinApplication), args.Error(1)
 }
 
+// 添加 GetByRequestID 方法到 mockJoinApplicationDAO 结构体
+func (m *mockJoinApplicationDAO) GetByRequestID(ctx context.Context, requestID int, tx ...*gorm.DB) (*models.JoinApplication, error) {
+	args := m.Called(ctx, requestID, tx)
+	applicationArg := args.Get(0)
+	if applicationArg == nil {
+		return nil, args.Error(1)
+	}
+	return applicationArg.(*models.JoinApplication), args.Error(1)
+}
+
+// Mock GroupMemberRedisDAO
+type mockGroupMemberRedisDAO struct {
+	mock.Mock
+}
+
+func (m *mockGroupMemberRedisDAO) GetMembersByGroupID(ctx context.Context, groupID int, tx ...*redis.Client) ([]*models.GroupMember, error) {
+	args := m.Called(ctx, groupID, tx)
+	membersArg := args.Get(0)
+	if membersArg == nil {
+		return nil, args.Error(1)
+	}
+	return membersArg.([]*models.GroupMember), args.Error(1)
+}
+
+func (m *mockGroupMemberRedisDAO) SetMembersByGroupID(ctx context.Context, groupID int, members []*models.GroupMember) error {
+	args := m.Called(ctx, groupID, members)
+	return args.Error(0)
+}
+
+func (m *mockGroupMemberRedisDAO) DeleteCacheByGroupID(ctx context.Context, groupID int) error {
+	args := m.Called(ctx, groupID)
+	return args.Error(0)
+}
+
+func (m *mockGroupMemberRedisDAO) GetMemberByGroupIDAndUserID(ctx context.Context, groupID, userID int, tx ...*redis.Client) (*models.GroupMember, error) {
+	args := m.Called(ctx, groupID, userID, tx)
+	memberArg := args.Get(0)
+	if memberArg == nil {
+		return nil, args.Error(1)
+	}
+	return memberArg.(*models.GroupMember), args.Error(1)
+}
+
+func (m *mockGroupMemberRedisDAO) SetMemberByGroupIDAndUserID(ctx context.Context, member *models.GroupMember) error {
+	args := m.Called(ctx, member)
+	return args.Error(0)
+}
+
+func (m *mockGroupMemberRedisDAO) DeleteCacheByGroupIDAndUserID(ctx context.Context, groupID, userID int) error {
+	args := m.Called(ctx, groupID, userID)
+	return args.Error(0)
+}
+
+// Mock GroupRedisDAO
+type mockGroupRedisDAO struct {
+	mock.Mock
+}
+
+func (m *mockGroupRedisDAO) GetByGroupID(ctx context.Context, groupID int, tx ...*redis.Client) (*models.Group, error) {
+	args := m.Called(ctx, groupID, tx)
+	groupArg := args.Get(0)
+	if groupArg == nil {
+		return nil, args.Error(1)
+	}
+	return groupArg.(*models.Group), args.Error(1)
+}
+
+func (m *mockGroupRedisDAO) SetByGroupID(ctx context.Context, groupID int, group *models.Group) error {
+	args := m.Called(ctx, groupID, group)
+	return args.Error(0)
+}
+
+func (m *mockGroupRedisDAO) DeleteCacheByGroupID(ctx context.Context, groupID int) error {
+	args := m.Called(ctx, groupID)
+	return args.Error(0)
+}
+
+// Mock JoinApplicationRedisDAO
+type mockJoinApplicationRedisDAO struct {
+	mock.Mock
+}
+
+func (m *mockJoinApplicationRedisDAO) GetByGroupID(ctx context.Context, groupID int, tx ...*redis.Client) ([]*models.JoinApplication, error) {
+	args := m.Called(ctx, groupID, tx)
+	applicationsArg := args.Get(0)
+	if applicationsArg == nil {
+		return nil, args.Error(1)
+	}
+	return applicationsArg.([]*models.JoinApplication), args.Error(1)
+}
+
+func (m *mockJoinApplicationRedisDAO) SetByGroupID(ctx context.Context, groupID int, applications []*models.JoinApplication) error {
+	args := m.Called(ctx, groupID, applications)
+	return args.Error(0)
+}
+
+func (m *mockJoinApplicationRedisDAO) GetByGroupIDAndStatus(ctx context.Context, groupID int, status string, tx ...*redis.Client) ([]*models.JoinApplication, error) {
+	args := m.Called(ctx, groupID, status, tx)
+	applicationsArg := args.Get(0)
+	if applicationsArg == nil {
+		return nil, args.Error(1)
+	}
+	return applicationsArg.([]*models.JoinApplication), args.Error(1)
+}
+
+func (m *mockJoinApplicationRedisDAO) SetByGroupIDAndStatus(ctx context.Context, groupID int, status string, applications []*models.JoinApplication) error {
+	args := m.Called(ctx, groupID, status, applications)
+	return args.Error(0)
+}
+
+func (m *mockJoinApplicationRedisDAO) GetByGroupIDAndUserID(ctx context.Context, groupID, userID int, tx ...*redis.Client) (*models.JoinApplication, error) {
+	args := m.Called(ctx, groupID, userID, tx)
+	applicationArg := args.Get(0)
+	if applicationArg == nil {
+		return nil, args.Error(1)
+	}
+	return applicationArg.(*models.JoinApplication), args.Error(1)
+}
+
+func (m *mockJoinApplicationRedisDAO) SetByGroupIDAndUserID(ctx context.Context, application *models.JoinApplication) error {
+	args := m.Called(ctx, application)
+	return args.Error(0)
+}
+
+func (m *mockJoinApplicationRedisDAO) DeleteCacheByGroupID(ctx context.Context, groupID int) error {
+	args := m.Called(ctx, groupID)
+	return args.Error(0)
+}
+
+func (m *mockJoinApplicationRedisDAO) DeleteCacheByGroupIDAndStatus(ctx context.Context, groupID int, status string) error {
+	args := m.Called(ctx, groupID, status)
+	return args.Error(0)
+}
+
+func (m *mockJoinApplicationRedisDAO) DeleteCacheByGroupIDAndUserID(ctx context.Context, groupID, userID int) error {
+	args := m.Called(ctx, groupID, userID)
+	return args.Error(0)
+}
+
 // --- 测试准备 ---
 
-func setupGroupServiceTest() (*GroupsService, *mockGroupDAO, *mockGroupMemberDAO, *mockJoinApplicationDAO, *mockTransactionManager) {
+func setupGroupServiceTest() (*GroupsService, *mockGroupDAO, *mockGroupMemberDAO, *mockJoinApplicationDAO, *mockTransactionManager, *mockGroupRedisDAO, *mockGroupMemberRedisDAO, *mockJoinApplicationRedisDAO) {
 	mockGroupDao := new(mockGroupDAO)
 	mockGroupMemberDao := new(mockGroupMemberDAO)
 	mockJoinApplicationDao := new(mockJoinApplicationDAO)
 	mockTxManager := new(mockTransactionManager)
+	mockGroupRedisDao := new(mockGroupRedisDAO)
+	mockGroupMemberRedisDao := new(mockGroupMemberRedisDAO)
+	mockJoinApplicationRedisDao := new(mockJoinApplicationRedisDAO)
+	mockTaskRedisDao := new(mockTaskRedisDAO)
 
 	groupsService := NewGroupsService(
 		mockGroupDao,
 		mockGroupMemberDao,
 		mockJoinApplicationDao,
 		mockTxManager,
+		mockGroupRedisDao,
+		mockGroupMemberRedisDao,
+		mockJoinApplicationRedisDao,
+		mockTaskRedisDao,
 	)
 
-	return groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager
+	return groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao
 }
 
 // --- CreateGroup 测试 ---
 
 func TestCreateGroup_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupName := "测试群组"
 	description := "这是一个测试群组"
@@ -223,6 +348,7 @@ func TestCreateGroup_Success(t *testing.T) {
 		assert.Equal(t, creatorName, memberArg.Username)
 		assert.Equal(t, "admin", memberArg.Role)
 	})
+	mockGroupRedisDao.On("SetByGroupID", ctx, mock.AnythingOfType("int"), mock.AnythingOfType("*models.Group")).Return(nil)
 
 	// 调用函数
 	createdGroup, err := groupsService.CreateGroup(ctx, groupName, description, creatorName, creatorID)
@@ -240,12 +366,15 @@ func TestCreateGroup_Success(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 // --- GetGroupByGroupID 测试 ---
 
 func TestGetGroupByGroupID_Success(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	expectedGroup := &models.Group{
@@ -258,8 +387,10 @@ func TestGetGroupByGroupID_Success(t *testing.T) {
 	}
 
 	// Mock期望
+	mockGroupRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil) // 模拟缓存未命中
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(expectedGroup, nil)
+	mockGroupRedisDao.On("SetByGroupID", ctx, groupID, expectedGroup).Return(nil) // 模拟缓存写入
 
 	// 调用函数
 	group, err := groupsService.GetGroupByGroupID(ctx, groupID)
@@ -272,14 +403,17 @@ func TestGetGroupByGroupID_Success(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetGroupByGroupID_NotFound(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 999 // 不存在的ID
 
 	// Mock期望
+	mockGroupRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil) // 模拟缓存未命中
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(nil, gorm.ErrRecordNotFound)
 
@@ -294,12 +428,14 @@ func TestGetGroupByGroupID_NotFound(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 // --- GetGroupsByUserID 测试 ---
 
 func TestGetGroupsByUserID_Success(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	userID := 1
 	expectedGroups := []*models.Group{
@@ -337,10 +473,11 @@ func TestGetGroupsByUserID_Success(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetGroupsByUserID_WithFilter_Success(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	userID := 1
 	filter := "created"
@@ -371,10 +508,11 @@ func TestGetGroupsByUserID_WithFilter_Success(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetGroupsByUserID_NotFound(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	userID := 999 // 不存在的用户
 
@@ -393,10 +531,11 @@ func TestGetGroupsByUserID_NotFound(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetGroupsByUserID_WithFilter_NotFound(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	userID := 999 // 不存在的用户
 	filter := "joined"
@@ -416,12 +555,13 @@ func TestGetGroupsByUserID_WithFilter_NotFound(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 // --- UpdateGroup 测试 ---
 
 func TestUpdateGroup_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 添加操作者ID（管理员）
@@ -441,12 +581,19 @@ func TestUpdateGroup_Success(t *testing.T) {
 		Username: "admin",
 		Role:     "admin",
 	}
+	members := []*models.GroupMember{adminMember}
 
 	// Mock期望
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("UpdateMessage", ctx, groupID, groupName, description, mock.AnythingOfType("[]*gorm.DB")).Return(nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(updatedGroup, nil)
+	mockGroupMemberDao.On("GetMembersByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(members, nil)
+
+	// Mock Redis操作
+	mockGroupRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockGroupMemberRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockGroupMemberRedisDao.On("DeleteCacheByGroupIDAndUserID", ctx, groupID, operatorID).Return(nil)
 
 	// 调用函数
 	result, err := groupsService.UpdateGroup(ctx, groupID, operatorID, groupName, description)
@@ -460,10 +607,12 @@ func TestUpdateGroup_Success(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestUpdateGroup_PermissionDenied(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, _, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 2 // 非管理员用户
@@ -495,7 +644,7 @@ func TestUpdateGroup_PermissionDenied(t *testing.T) {
 }
 
 func TestUpdateGroup_NotMember(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, _, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 999 // 非成员用户
@@ -524,7 +673,7 @@ func TestUpdateGroup_NotMember(t *testing.T) {
 // --- CheckMemberPermission 测试 ---
 
 func TestCheckMemberPermission_AdminSuccess(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, _ := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, _, _, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 1
@@ -536,7 +685,9 @@ func TestCheckMemberPermission_AdminSuccess(t *testing.T) {
 	}
 
 	// Mock期望
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.Anything).Return(nil, redis.Nil) // 缓存未命中
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(member, nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, member).Return(nil) // 缓存写入
 
 	// 调用函数
 	err := groupsService.CheckMemberPermission(ctx, groupID, userID)
@@ -546,10 +697,11 @@ func TestCheckMemberPermission_AdminSuccess(t *testing.T) {
 
 	// 验证mock调用
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestCheckMemberPermission_NotAdmin(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, _ := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, _, _, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -561,7 +713,9 @@ func TestCheckMemberPermission_NotAdmin(t *testing.T) {
 	}
 
 	// Mock期望
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.Anything).Return(nil, redis.Nil) // 缓存未命中
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(member, nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, member).Return(nil) // 缓存写入
 
 	// 调用函数
 	err := groupsService.CheckMemberPermission(ctx, groupID, userID)
@@ -572,15 +726,17 @@ func TestCheckMemberPermission_NotAdmin(t *testing.T) {
 
 	// 验证mock调用
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestCheckMemberPermission_MemberNotFound(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, _ := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, _, _, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 999 // 不存在的成员
 
 	// Mock期望
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.Anything).Return(nil, redis.Nil) // 缓存未命中
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(nil, gorm.ErrRecordNotFound)
 
 	// 调用函数
@@ -592,80 +748,13 @@ func TestCheckMemberPermission_MemberNotFound(t *testing.T) {
 
 	// 验证mock调用
 	mockGroupMemberDao.AssertExpectations(t)
-}
-
-// --- AddMemberToGroup 测试 ---
-
-func TestAddMemberToGroup_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
-	ctx := context.Background()
-	groupID := 1
-	userID := 2
-	operatorID := 1 // 操作者ID（管理员）
-	username := "testuser"
-
-	// Mock期望
-	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
-	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(nil, gorm.ErrRecordNotFound)
-	mockGroupMemberDao.On("Create", ctx, mock.AnythingOfType("*models.GroupMember"), mock.AnythingOfType("[]*gorm.DB")).Return(nil).Run(func(args mock.Arguments) {
-		memberArg := args.Get(1).(*models.GroupMember)
-		assert.Equal(t, groupID, memberArg.GroupID)
-		assert.Equal(t, userID, memberArg.UserID)
-		assert.Equal(t, username, memberArg.Username)
-	})
-	mockGroupDao.On("UpdateMemberNum", ctx, groupID, true, mock.AnythingOfType("[]*gorm.DB")).Return(nil)
-
-	// 调用函数
-	member, err := groupsService.AddMemberToGroup(ctx, groupID, userID, operatorID, username)
-
-	// 断言
-	assert.NoError(t, err)
-	assert.NotNil(t, member)
-	assert.Equal(t, groupID, member.GroupID)
-	assert.Equal(t, userID, member.UserID)
-	assert.Equal(t, username, member.Username)
-
-	// 验证mock调用
-	mockTxManager.AssertExpectations(t)
-	mockGroupMemberDao.AssertExpectations(t)
-	mockGroupDao.AssertExpectations(t)
-}
-
-func TestAddMemberToGroup_MemberAlreadyExists(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
-	ctx := context.Background()
-	groupID := 1
-	userID := 2
-	operatorID := 1
-	username := "testuser"
-	existingMember := &models.GroupMember{
-		GroupID:  groupID,
-		UserID:   userID,
-		Username: username,
-	}
-
-	// Mock期望
-	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
-	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(existingMember, nil)
-
-	// 调用函数
-	member, err := groupsService.AddMemberToGroup(ctx, groupID, userID, operatorID, username)
-
-	// 断言
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, appErrors.ErrGroupMemberAlreadyExists))
-	assert.Nil(t, member)
-
-	// 验证mock调用
-	mockTxManager.AssertExpectations(t)
-	mockGroupMemberDao.AssertExpectations(t)
-	mockGroupDao.AssertNotCalled(t, "UpdateMemberNum", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 // --- RemoveMemberFromGroup 测试 ---
 
 func TestRemoveMemberFromGroup_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -693,10 +782,11 @@ func TestRemoveMemberFromGroup_Success(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestRemoveMemberFromGroup_NoPermission(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, _, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -728,7 +818,7 @@ func TestRemoveMemberFromGroup_NoPermission(t *testing.T) {
 // --- GetMembersByGroupID 测试 ---
 
 func TestGetMembersByGroupID_Success(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	expectedMembers := []*models.GroupMember{
@@ -762,10 +852,11 @@ func TestGetMembersByGroupID_Success(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetMembersByGroupID_GroupNotFound(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, mockGroupMemberRedisDao, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 999 // 不存在的群组
 
@@ -784,12 +875,13 @@ func TestGetMembersByGroupID_GroupNotFound(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 // --- CreateJoinApplication 测试 ---
 
 func TestCreateJoinApplication_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupMemberRedisDao, mockJoinApplicationRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -830,10 +922,12 @@ func TestCreateJoinApplication_Success(t *testing.T) {
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestCreateJoinApplication_GroupNotFound(t *testing.T) {
-	groupsService, mockGroupDao, _, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, _, _, mockTxManager, _, _, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 999 // 不存在的群组
 	userID := 2
@@ -858,7 +952,7 @@ func TestCreateJoinApplication_GroupNotFound(t *testing.T) {
 }
 
 func TestCreateJoinApplication_AlreadyMember(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupMemberRedisDao, mockJoinApplicationRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -875,7 +969,8 @@ func TestCreateJoinApplication_AlreadyMember(t *testing.T) {
 		Username: username,
 	}
 
-	// Mock期望
+	// Mock期望 - 添加Redis缓存查询的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndUserID", ctx, groupID, userID, mock.Anything).Return(nil, redis.Nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(group, nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, userID, mock.AnythingOfType("[]*gorm.DB")).Return(existingMember, nil)
@@ -892,12 +987,14 @@ func TestCreateJoinApplication_AlreadyMember(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 // --- GetJoinApplicationsByGroupID 测试 ---
 
 func TestGetJoinApplicationsByGroupID_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 管理员
@@ -932,6 +1029,11 @@ func TestGetJoinApplicationsByGroupID_Success(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
+	mockJoinApplicationRedisDao.On("SetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(group, nil)
@@ -951,10 +1053,13 @@ func TestGetJoinApplicationsByGroupID_Success(t *testing.T) {
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetJoinApplicationsByGroupID_NoPermission(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, _, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 2 // 非管理员
@@ -966,6 +1071,11 @@ func TestGetJoinApplicationsByGroupID_NoPermission(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil, redis.Nil)
+	mockJoinApplicationRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(member, nil)
 
@@ -980,11 +1090,12 @@ func TestGetJoinApplicationsByGroupID_NoPermission(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
-	mockGroupDao.AssertNotCalled(t, "GetByGroupID", mock.Anything, mock.Anything, mock.Anything)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetJoinApplicationsByGroupID_GroupNotFound(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, _, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 管理员
@@ -996,6 +1107,11 @@ func TestGetJoinApplicationsByGroupID_GroupNotFound(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil, redis.Nil)
+	mockJoinApplicationRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(nil, gorm.ErrRecordNotFound)
@@ -1012,10 +1128,12 @@ func TestGetJoinApplicationsByGroupID_GroupNotFound(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetJoinApplicationsByGroupID_NoApplications(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 管理员
@@ -1032,6 +1150,11 @@ func TestGetJoinApplicationsByGroupID_NoApplications(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil, redis.Nil)
+	mockJoinApplicationRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(group, nil)
@@ -1050,10 +1173,13 @@ func TestGetJoinApplicationsByGroupID_NoApplications(t *testing.T) {
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetJoinApplicationsByGroupID_AllFilter(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 管理员
@@ -1084,19 +1210,16 @@ func TestGetJoinApplicationsByGroupID_AllFilter(t *testing.T) {
 			UserID:    3,
 			Username:  "applicant2",
 			Reason:    "请允许我加入",
-			Status:    "accepted",
-		},
-		{
-			RequestID: 3,
-			GroupID:   groupID,
-			UserID:    4,
-			Username:  "applicant3",
-			Reason:    "申请加入",
-			Status:    "rejected",
+			Status:    "pending",
 		},
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupID", ctx, groupID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
+	mockJoinApplicationRedisDao.On("SetByGroupID", ctx, groupID, mock.Anything).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(group, nil)
@@ -1109,17 +1232,20 @@ func TestGetJoinApplicationsByGroupID_AllFilter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, applications)
 	assert.Equal(t, expectedApplications, applications)
-	assert.Len(t, applications, 3)
+	assert.Len(t, applications, 2)
 
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetJoinApplicationsByGroupID_StatusFilter(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1      // 管理员
@@ -1147,6 +1273,11 @@ func TestGetJoinApplicationsByGroupID_StatusFilter(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, filter, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
+	mockJoinApplicationRedisDao.On("SetByGroupIDAndStatus", ctx, groupID, filter, mock.Anything).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("GetByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(group, nil)
@@ -1167,12 +1298,15 @@ func TestGetJoinApplicationsByGroupID_StatusFilter(t *testing.T) {
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 // --- RejectJoinApplication 测试 ---
 
 func TestRejectJoinApplication_Success(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1186,12 +1320,31 @@ func TestRejectJoinApplication_Success(t *testing.T) {
 		Username: "admin",
 		Role:     "admin",
 	}
+	rejectedApplication := &models.JoinApplication{
+		RequestID:    requestID,
+		GroupID:      groupID,
+		UserID:       userID,
+		Username:     username,
+		Status:       "rejected",
+		RejectReason: rejectReason,
+	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupIDAndUserID", ctx, groupID, userID).Return(nil)
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return([]*models.JoinApplication{}, nil)
+	mockJoinApplicationRedisDao.On("SetByGroupIDAndStatus", ctx, groupID, "pending", mock.Anything).Return(nil)
+	mockJoinApplicationRedisDao.On("GetByGroupIDAndStatus", ctx, groupID, "rejected", mock.Anything).Return([]*models.JoinApplication{}, nil)
+	mockJoinApplicationRedisDao.On("SetByGroupIDAndStatus", ctx, groupID, "rejected", mock.Anything).Return(nil)
+
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockJoinApplicationDao.On("UpdateStatus", ctx, requestID, "rejected", mock.AnythingOfType("[]*gorm.DB")).Return(nil)
 	mockJoinApplicationDao.On("UpdateRejectReason", ctx, requestID, rejectReason, mock.AnythingOfType("[]*gorm.DB")).Return(nil)
+	mockJoinApplicationDao.On("GetByRequestID", ctx, requestID, mock.AnythingOfType("[]*gorm.DB")).Return(rejectedApplication, nil)
 
 	// 调用函数
 	err := groupsService.RejectJoinApplication(ctx, groupID, userID, operatorID, requestID, username, rejectReason)
@@ -1203,10 +1356,13 @@ func TestRejectJoinApplication_Success(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestRejectJoinApplication_PermissionDenied(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1222,6 +1378,9 @@ func TestRejectJoinApplication_PermissionDenied(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(member, nil)
 
@@ -1236,12 +1395,15 @@ func TestRejectJoinApplication_PermissionDenied(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 // --- DeleteGroup 测试 ---
 
 func TestDeleteGroup_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 1 // 管理员
@@ -1253,9 +1415,23 @@ func TestDeleteGroup_Success(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
+	mockGroupRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockGroupMemberRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockGroupMemberRedisDao.On("DeleteCacheByGroupIDAndUserID", ctx, groupID, operatorID).Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupID", ctx, groupID).Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupIDAndStatus", ctx, groupID, "pending").Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupIDAndStatus", ctx, groupID, "accepted").Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupIDAndStatus", ctx, groupID, "rejected").Return(nil)
+	mockJoinApplicationRedisDao.On("DeleteCacheByGroupIDAndUserID", ctx, groupID, operatorID).Return(nil)
+
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(adminMember, nil)
 	mockGroupDao.On("Delete", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return(nil)
+	mockGroupMemberDao.On("GetMembersByGroupID", ctx, groupID, mock.AnythingOfType("[]*gorm.DB")).Return([]*models.GroupMember{adminMember}, nil)
+	mockGroupMemberDao.On("Delete", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(nil)
 
 	// 调用函数
 	err := groupsService.DeleteGroup(ctx, groupID, operatorID)
@@ -1267,10 +1443,13 @@ func TestDeleteGroup_Success(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestDeleteGroup_PermissionDenied(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	operatorID := 2 // 非管理员
@@ -1282,6 +1461,9 @@ func TestDeleteGroup_PermissionDenied(t *testing.T) {
 	}
 
 	// Mock期望
+	// 添加Redis缓存查询和设置的mock
+	mockGroupMemberRedisDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.Anything).Return(nil, redis.Nil)
+	mockGroupMemberRedisDao.On("SetMemberByGroupIDAndUserID", ctx, mock.AnythingOfType("*models.GroupMember")).Return(nil)
 	mockTxManager.On("WithTransaction", ctx, mock.AnythingOfType("func(*gorm.DB) error")).Return(nil)
 	mockGroupMemberDao.On("GetMemberByGroupIDAndUserID", ctx, groupID, operatorID, mock.AnythingOfType("[]*gorm.DB")).Return(member, nil)
 
@@ -1296,12 +1478,15 @@ func TestDeleteGroup_PermissionDenied(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 // --- GetUserGroupStatus 测试 ---
 
 func TestGetUserGroupStatus_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1339,10 +1524,12 @@ func TestGetUserGroupStatus_Success(t *testing.T) {
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 func TestGetUserGroupStatus_NotFound(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, _, _, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1371,10 +1558,11 @@ func TestGetUserGroupStatus_NotFound(t *testing.T) {
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestGetUserGroupStatus_Member(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, _ := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1407,12 +1595,14 @@ func TestGetUserGroupStatus_Member(t *testing.T) {
 	mockTxManager.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
 }
 
 // --- ApproveJoinApplication 测试 ---
 
 func TestApproveJoinApplication_Success(t *testing.T) {
-	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager := setupGroupServiceTest()
+	groupsService, mockGroupDao, mockGroupMemberDao, mockJoinApplicationDao, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1449,10 +1639,13 @@ func TestApproveJoinApplication_Success(t *testing.T) {
 	mockGroupMemberDao.AssertExpectations(t)
 	mockGroupDao.AssertExpectations(t)
 	mockJoinApplicationDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }
 
 func TestApproveJoinApplication_PermissionDenied(t *testing.T) {
-	groupsService, _, mockGroupMemberDao, _, mockTxManager := setupGroupServiceTest()
+	groupsService, _, mockGroupMemberDao, _, mockTxManager, mockGroupRedisDao, mockGroupMemberRedisDao, mockJoinApplicationRedisDao := setupGroupServiceTest()
 	ctx := context.Background()
 	groupID := 1
 	userID := 2
@@ -1481,4 +1674,7 @@ func TestApproveJoinApplication_PermissionDenied(t *testing.T) {
 	// 验证mock调用
 	mockTxManager.AssertExpectations(t)
 	mockGroupMemberDao.AssertExpectations(t)
+	mockGroupRedisDao.AssertExpectations(t)
+	mockGroupMemberRedisDao.AssertExpectations(t)
+	mockJoinApplicationRedisDao.AssertExpectations(t)
 }

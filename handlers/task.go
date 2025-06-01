@@ -21,14 +21,21 @@ func NewTaskHandler(container *app.AppContainer) (gen.CheckinTasksServerInterfac
 	TaskService := service.NewTaskService(
 		container.DaoFactory.TaskDAO,
 		container.DaoFactory.TaskRecordDAO,
+		container.DaoFactory.TaskRecordRedisDAO,
+		container.DaoFactory.TaskRedisDAO,
 		container.DaoFactory.TransactionManager,
 		container.DaoFactory.GroupDAO,
+		container.DaoFactory.GroupMemberDAO,
 	)
 	GroupsService := service.NewGroupsService(
 		container.DaoFactory.GroupDAO,
 		container.DaoFactory.GroupMemberDAO,
 		container.DaoFactory.JoinApplicationDAO,
 		container.DaoFactory.TransactionManager,
+		container.DaoFactory.GroupRedisDAO,
+		container.DaoFactory.GroupMemberRedisDAO,
+		container.DaoFactory.JoinApplicationRedisDAO,
+		container.DaoFactory.TaskRedisDAO,
 	)
 	AuditRequestService := service.NewAuditRequestService(
 		container.DaoFactory.TransactionManager,
@@ -36,6 +43,9 @@ func NewTaskHandler(container *app.AppContainer) (gen.CheckinTasksServerInterfac
 		container.DaoFactory.TaskRecordDAO,
 		container.DaoFactory.TaskDAO,
 		container.DaoFactory.GroupDAO,
+		container.DaoFactory.CheckApplicationRedisDAO,
+		container.DaoFactory.TaskRedisDAO,
+		container.DaoFactory.TaskRecordRedisDAO,
 	)
 	handler := &TaskHandler{
 		taskService:         TaskService,
@@ -602,6 +612,8 @@ func (h *TaskHandler) PostGroupsGroupIdCheckinTasks(ctx context.Context, request
 	}
 
 	// 验证 WiFi 和 NFC 相关参数
+
+	ssid,bssid := "",""
 	if request.Body.VerificationConfig.CheckinMethods.Wifi {
 		if request.Body.VerificationConfig.WifiInfo == nil {
 			return &gen.PostGroupsGroupIdCheckinTasks400JSONResponse{
@@ -615,8 +627,12 @@ func (h *TaskHandler) PostGroupsGroupIdCheckinTasks(ctx context.Context, request
 				Message: "WiFi信息不完整，必须提供SSID和BSSID",
 			}, nil
 		}
+		ssid = request.Body.VerificationConfig.WifiInfo.Ssid
+		bssid = request.Body.VerificationConfig.WifiInfo.Bssid
 	}
 
+
+	tagId,tagName := "",""
 	if request.Body.VerificationConfig.CheckinMethods.Nfc {
 		if request.Body.VerificationConfig.NfcInfo == nil {
 			return &gen.PostGroupsGroupIdCheckinTasks400JSONResponse{
@@ -630,6 +646,8 @@ func (h *TaskHandler) PostGroupsGroupIdCheckinTasks(ctx context.Context, request
 				Message: "NFC信息不完整，必须提供标签ID",
 			}, nil
 		}
+		tagId = request.Body.VerificationConfig.NfcInfo.TagId
+		tagName = request.Body.VerificationConfig.NfcInfo.TagName
 	}
 
 	if request.Body.VerificationConfig.CheckinMethods.Gps {
@@ -670,6 +688,10 @@ func (h *TaskHandler) PostGroupsGroupIdCheckinTasks(ctx context.Context, request
 		request.Body.VerificationConfig.CheckinMethods.Face,
 		request.Body.VerificationConfig.CheckinMethods.Wifi,
 		request.Body.VerificationConfig.CheckinMethods.Nfc,
+		ssid,
+		bssid,
+		tagId,
+		tagName,
 	)
 	if err != nil {
 		return nil, err
@@ -774,13 +796,15 @@ func (h *TaskHandler) GetUsersMeCheckinTasks(ctx context.Context, request gen.Ge
 		// 判断签到状态
 		var myCheckinStatus gen.UserCheckinStatus
 		if recordMap[task.TaskID] != nil {
-			myCheckinStatus = gen.UserCheckinStatusSuccess
+			if auditMap[task.TaskID] != nil && auditMap[task.TaskID].Status == "approved" {
+				myCheckinStatus = gen.UserCheckinStatusAuditApproved
+			}else{
+				myCheckinStatus = gen.UserCheckinStatusSuccess
+			}
 		} else if auditMap[task.TaskID] != nil {
 			switch auditMap[task.TaskID].Status {
 			case "pending":
 				myCheckinStatus = gen.UserCheckinStatusPendingAudit
-			case "approved":
-				myCheckinStatus = gen.UserCheckinStatusAuditApproved
 			case "rejected":
 				myCheckinStatus = gen.UserCheckinStatusAuditRejected
 			}
@@ -847,6 +871,10 @@ func (h *TaskHandler) GetUsersMeCheckinTasks(ctx context.Context, request gen.Ge
 func (h *TaskHandler) PostCheckinTasksTaskIdCheckin(ctx context.Context, request gen.PostCheckinTasksTaskIdCheckinRequestObject) (gen.PostCheckinTasksTaskIdCheckinResponseObject, error) {
 	// 从上下文中获取用户ID
 	userID, ok := ctx.Value("userID").(int)
+	if !ok {
+		return nil, appErrors.ErrJwtParseFailed
+	}
+	username, ok := ctx.Value("username").(string)
 	if !ok {
 		return nil, appErrors.ErrJwtParseFailed
 	}
@@ -929,7 +957,7 @@ func (h *TaskHandler) PostCheckinTasksTaskIdCheckin(ctx context.Context, request
 		return nil, err
 	}
 	// 调用服务执行签到
-	record, err := h.taskService.CheckInTask(ctx, request.TaskId, userID, request.Body.VerificationData.LocationInfo.Location.Latitude, request.Body.VerificationData.LocationInfo.Location.Longitude, time.Now())
+	record, err := h.taskService.CheckInTask(ctx, request.TaskId, userID, username, request.Body.VerificationData.LocationInfo.Location.Latitude, request.Body.VerificationData.LocationInfo.Location.Longitude, time.Now())
 	if err != nil {
 		if errors.Is(err, appErrors.ErrTaskRecordAlreadyExists) {
 			return &gen.PostCheckinTasksTaskIdCheckin409JSONResponse{
@@ -959,7 +987,7 @@ func (h *TaskHandler) PostCheckinTasksTaskIdCheckin(ctx context.Context, request
 				}{
 					RecordId:   record.RecordID,
 					SignedTime: int(record.SignedTime.Unix()),
-					Success:    true,
+					Success:    false,
 				},
 			}, nil
 		}

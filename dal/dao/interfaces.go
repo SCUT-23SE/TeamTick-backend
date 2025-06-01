@@ -3,7 +3,9 @@ package dao
 import (
 	"TeamTickBackend/dal/models"
 	"context"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -12,6 +14,8 @@ type UserDAO interface {
 	Create(ctx context.Context, user *models.User, tx ...*gorm.DB) error
 	GetByUsername(ctx context.Context, username string, tx ...*gorm.DB) (*models.User, error)
 	GetByID(ctx context.Context, id int, tx ...*gorm.DB) (*models.User, error)
+	UpdatePassword(ctx context.Context, userID int, password string, tx ...*gorm.DB) error
+	GetByEmail(ctx context.Context, email string, tx ...*gorm.DB) (*models.User, error)
 }
 
 // TaskDAO 任务数据访问接口
@@ -63,6 +67,7 @@ type JoinApplicationDAO interface {
 	UpdateStatus(ctx context.Context, requestID int, status string, tx ...*gorm.DB) error
 	UpdateRejectReason(ctx context.Context, requestID int, rejectReason string, tx ...*gorm.DB) error
 	GetByGroupIDAndUserID(ctx context.Context, groupID int, userID int, tx ...*gorm.DB) (*models.JoinApplication, error)
+	GetByRequestID(ctx context.Context, requestID int, tx ...*gorm.DB) (*models.JoinApplication, error)
 	GetByGroupID(ctx context.Context, groupID int, tx ...*gorm.DB) ([]*models.JoinApplication, error)
 }
 
@@ -75,3 +80,88 @@ type CheckApplicationDAO interface {
 	GetByTaskIDAndUserID(ctx context.Context, taskID int, userID int, tx ...*gorm.DB) (*models.CheckApplication, error)
 	GetByID(ctx context.Context, id int, tx ...*gorm.DB) (*models.CheckApplication, error)
 }
+
+
+// TaskRecordRedisDAO Redis缓存实现的签到记录访问接口
+type TaskRecordRedisDAO interface {
+	GetByTaskID(ctx context.Context, taskID int, tx ...*redis.Client) ([]*models.TaskRecord, error)
+	SetByTaskID(ctx context.Context, taskID int, records []*models.TaskRecord) error
+	GetByUserID(ctx context.Context, userID int, tx ...*redis.Client) ([]*models.TaskRecord, error)
+	SetByUserID(ctx context.Context, userID int, records []*models.TaskRecord) error
+	GetByTaskIDAndUserID(ctx context.Context, taskID, userID int, tx ...*redis.Client) (*models.TaskRecord, error)
+	SetTaskIDAndUserID(ctx context.Context, record *models.TaskRecord) error
+	DeleteCacheByTaskIDAndUserID(ctx context.Context, taskID, userID int) error
+}
+
+// TaskRedisDAO Redis缓存实现的签到任务访问接口
+type TaskRedisDAO interface {
+	GetByGroupID(ctx context.Context,groupID int,tx ...*redis.Client) ([]*models.Task,error)
+	SetByGroupID(ctx context.Context,groupID int,tasks []*models.Task) error
+	GetByTaskID(ctx context.Context,taskID int,tx ...*redis.Client) (*models.Task,error)
+	SetByTaskID(ctx context.Context,taskID int,task *models.Task) error
+	DeleteCacheByTaskID(ctx context.Context,taskID int) error
+	DeleteCacheByGroupID(ctx context.Context,groupID int) error
+	GetByUserID(ctx context.Context,userID int,tx ...*redis.Client) ([]*models.Task,error)
+	SetByUserID(ctx context.Context,userID int,tasks []*models.Task) error
+	DeleteCacheByUserID(ctx context.Context,userID int) error
+}
+
+// GroupRedisDAO Redis缓存实现的组访问接口
+type GroupRedisDAO interface{
+	GetByGroupID(ctx context.Context,groupID int,tx ...*redis.Client) (*models.Group,error)
+	SetByGroupID(ctx context.Context,groupID int,group *models.Group) error
+	DeleteCacheByGroupID(ctx context.Context,groupID int) error
+}
+
+// GroupMemberRedisDAO Redis缓存实现的组成员访问接口
+type GroupMemberRedisDAO interface{
+	GetMembersByGroupID(ctx context.Context,groupID int,tx ...*redis.Client) ([]*models.GroupMember,error)
+	SetMembersByGroupID(ctx context.Context,groupID int,members []*models.GroupMember) error
+	DeleteCacheByGroupID(ctx context.Context,groupID int) error
+	GetMemberByGroupIDAndUserID(ctx context.Context,groupID,userID int,tx ...*redis.Client) (*models.GroupMember,error)
+	SetMemberByGroupIDAndUserID(ctx context.Context,member *models.GroupMember) error
+	DeleteCacheByGroupIDAndUserID(ctx context.Context,groupID,userID int) error
+}
+
+// JoinApplicationRedisDAO Redis缓存实现的加入申请访问接口
+type JoinApplicationRedisDAO interface{
+	GetByGroupID(ctx context.Context,groupID int,tx ...*redis.Client) ([]*models.JoinApplication,error)
+	SetByGroupID(ctx context.Context,groupID int,applications []*models.JoinApplication) error
+	DeleteCacheByGroupID(ctx context.Context,groupID int) error
+	GetByGroupIDAndStatus(ctx context.Context,groupID int,status string,tx ...*redis.Client) ([]*models.JoinApplication,error)
+	SetByGroupIDAndStatus(ctx context.Context,groupID int,status string,applications []*models.JoinApplication) error
+	DeleteCacheByGroupIDAndStatus(ctx context.Context,groupID int,status string) error
+	SetByGroupIDAndUserID(ctx context.Context,application *models.JoinApplication) error
+	DeleteCacheByGroupIDAndUserID(ctx context.Context,groupID,userID int) error
+	GetByGroupIDAndUserID(ctx context.Context, groupID int, userID int, tx ...*redis.Client) (*models.JoinApplication, error)
+}
+
+// StatisticsDAO 统计数据访问接口
+type StatisticsDAO interface {
+	GetAllGroups(ctx context.Context,tx ...*gorm.DB) ([]*models.Group,error)
+	GetGroupSignInSuccess(ctx context.Context,groupID int,startTime, endTime time.Time,tx ...*gorm.DB) ([]*models.TaskRecord,error)
+	GetGroupSignInException(ctx context.Context, groupID int, startTime, endTime time.Time, tx ...*gorm.DB) ([]*models.CheckApplication, error)
+	GetGroupSignInAbsent(ctx context.Context, groupID int, startTime, endTime time.Time, tx ...*gorm.DB) ([]*models.AbsentRecord, error)
+	GetMemberSignInSuccessNum(ctx context.Context,groupID,userID int,startTime, endTime time.Time,tx ...*gorm.DB) (int,error)
+	GetMemberSignInExceptionNum(ctx context.Context,groupID,userID int,startTime, endTime time.Time,tx ...*gorm.DB) (int,error)
+	GetMemberSignInAbsentNum(ctx context.Context,groupID,userID int,startTime, endTime time.Time,tx ...*gorm.DB) (int,error)
+}
+
+type CheckApplicationRedisDAO interface{
+	GetByGroupID(ctx context.Context,groupID int,tx ...*redis.Client) ([]*models.CheckApplication,error)
+	SetByGroupID(ctx context.Context,groupID int,applications []*models.CheckApplication) error
+	DeleteCacheByGroupID(ctx context.Context,groupID int) error
+	GetByUserID(ctx context.Context,userID int,tx ...*redis.Client) ([]*models.CheckApplication,error)
+	SetByUserID(ctx context.Context,userID int,applications []*models.CheckApplication) error
+	DeleteCacheByUserID(ctx context.Context,userID int) error
+	GetByGroupIDAndStatus(ctx context.Context,groupID int,status string,tx ...*redis.Client) ([]*models.CheckApplication,error)
+	SetByGroupIDAndStatus(ctx context.Context,groupID int,status string,applications []*models.CheckApplication) error
+	DeleteCacheByGroupIDAndStatus(ctx context.Context,groupID int,status string) error
+}
+
+type EmailRedisDAO interface{
+	GetVerificationCodeByEmail(ctx context.Context,email string,tx ...*redis.Client) (string,error)
+	SetVerificationCodeByEmail(ctx context.Context,email string,code string) error
+	DeleteCacheByEmail(ctx context.Context,email string) error
+}
+
